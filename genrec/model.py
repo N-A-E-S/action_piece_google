@@ -17,7 +17,8 @@
 
 from typing import Any, Dict
 
-from genrec.dataset import AbstractDataset
+# 移除循环导入 - 改为延迟导入
+# from genrec.dataset import AbstractDataset
 from genrec.tokenizer import AbstractTokenizer
 
 from torch import nn
@@ -36,7 +37,7 @@ class AbstractModel(nn.Module):
   def __init__(
       self,
       config: Dict[str, Any],
-      dataset: AbstractDataset,
+      dataset: Any,  # 改为 Any 类型以避免循环导入
       tokenizer: AbstractTokenizer,
   ):
     super().__init__()

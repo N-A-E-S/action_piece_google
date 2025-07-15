@@ -28,9 +28,10 @@ from typing import Any, Optional, Union
 
 import accelerate.utils
 import datasets.utils.logging
-from genrec.dataset import AbstractDataset
+# 移除这行导入，改为在函数内部延迟导入
+# from genrec.dataset import AbstractDataset
 from genrec.model import AbstractModel
-from genrec.trainer import Trainer
+# from genrec.trainer import Trainer  # 改为延迟导入
 import numpy as np
 import requests
 import torch
@@ -159,11 +160,21 @@ def log(message, accelerator, logger, level='info'):
   """
   if accelerator.is_main_process:
     try:
-      level = logging.getLevelNamesMapping()[level.upper()]
+      # 兼容 Python 3.10 和更早版本
+      level_mapping = {
+          'DEBUG': logging.DEBUG,
+          'INFO': logging.INFO,
+          'WARNING': logging.WARNING,
+          'ERROR': logging.ERROR,
+          'CRITICAL': logging.CRITICAL
+      }
+      level_num = level_mapping.get(level.upper())
+      if level_num is None:
+        raise ValueError(f'Invalid log level: {level}')
     except KeyError as exc:
       raise ValueError(f'Invalid log level: {level}') from exc
 
-    logger.log(level, message)
+    logger.log(level_num, message)
 
 
 def get_tokenizer(model_name: str):
@@ -187,21 +198,23 @@ def get_tokenizer(model_name: str):
     raise ValueError(f'Tokenizer for model "{model_name}" not found.') from exc
 
 
-def get_model(model_name: Union[str, AbstractModel]) -> AbstractModel:
+def get_model(model_name: Union[str, Any]) -> Any:
   """Retrieves the model class based on the provided model name.
 
   Args:
-      model_name (Union[str, AbstractModel]): The name of the model or an
+      model_name (Union[str, Any]): The name of the model or an
         instance of the model class.
 
   Returns:
-      AbstractModel: The model class corresponding to the provided model name.
+      Any: The model class corresponding to the provided model name.
 
   Raises:
       ValueError: If the model name is not found.
   """
-  if isinstance(model_name, AbstractModel):
-    return model_name
+  if hasattr(model_name, '__class__') and hasattr(model_name.__class__, '__name__'):
+    # 检查是否是模型实例，但避免直接类型检查
+    if 'AbstractModel' in str(type(model_name)):
+      return model_name
 
   try:
     model_class = getattr(importlib.import_module('genrec.models'), model_name)
@@ -210,7 +223,7 @@ def get_model(model_name: Union[str, AbstractModel]) -> AbstractModel:
   return model_class
 
 
-def get_dataset(dataset_name: Union[str, AbstractDataset]) -> AbstractDataset:
+def get_dataset(dataset_name: Union[str, Any]) -> Any:
   """Get the dataset object based on the dataset name or directly return the dataset object if it is already provided.
 
   Args:
@@ -223,6 +236,9 @@ def get_dataset(dataset_name: Union[str, AbstractDataset]) -> AbstractDataset:
   Raises:
       ValueError: If the dataset name is not found.
   """
+  # 延迟导入以避免循环导入
+  from genrec.dataset import AbstractDataset
+  
   if isinstance(dataset_name, AbstractDataset):
     return dataset_name
 
@@ -235,17 +251,20 @@ def get_dataset(dataset_name: Union[str, AbstractDataset]) -> AbstractDataset:
   return dataset_class
 
 
-def get_trainer(model_name: Union[str, AbstractModel]):
+def get_trainer(model_name: Union[str, Any]):
   """Returns the trainer class based on the given model name.
 
   Args:
-      model_name (Union[str, AbstractModel]): The name of the model or an
+      model_name (Union[str, Any]): The name of the model or an
         instance of the AbstractModel class.
 
   Returns:
       trainer_class: The trainer class corresponding to the given model name. If
       the model name is not found, the default Trainer class is returned.
   """
+  # 延迟导入
+  from genrec.trainer import Trainer
+  
   if isinstance(model_name, str):
     trainer_class = getattr(
         importlib.import_module(f'genrec.models.{model_name}.trainer'),
@@ -294,10 +313,12 @@ def _convert_value(value: str) -> Any:
     return float(value)
   except ValueError:
     pass
-  try:
-    return list(map(lambda x: x.strip(), value.strip('[]').split(',')))
-  except (ValueError, TypeError):
-    pass
+  # 修复：只有当字符串明确包含 [ 和 ] 时才尝试解析为列表
+  if value.strip().startswith('[') and value.strip().endswith(']'):
+    try:
+      return list(map(lambda x: x.strip(), value.strip('[]').split(',')))
+    except (ValueError, TypeError):
+      pass
   return value
 
 
@@ -322,8 +343,8 @@ def convert_config_dict(config: dict[Any, Any]) -> dict[Any, Any]:
 
 
 def get_config(
-    model_name: Union[str, AbstractModel],
-    dataset_name: Union[str, AbstractDataset],
+    model_name: Union[str, Any],
+    dataset_name: Union[str, Any],
     config_file: Union[str, list[str], None],
     config_dict: Optional[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -333,9 +354,9 @@ def get_config(
   config.yaml > default.yaml
 
   Args:
-      model_name (Union[str, AbstractModel]): The name of the model or an
+      model_name (Union[str, Any]): The name of the model or an
         instance of the model class.
-      dataset_name (Union[str, AbstractDataset]): The name of the dataset or an
+      dataset_name (Union[str, Any]): The name of the dataset or an
         instance of the dataset class.
       config_file (Union[str, list[str], None]): The path to additional
         configuration file(s) or a list of paths to multiple additional

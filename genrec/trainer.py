@@ -28,10 +28,10 @@ from typing import Any
 from genrec.evaluator import Evaluator
 from genrec.model import AbstractModel
 from genrec.tokenizer import AbstractTokenizer
-from genrec.utils import config_for_log
-from genrec.utils import get_file_name
-from genrec.utils import get_total_steps
-from genrec.utils import log
+# from genrec.utils import config_for_log
+# from genrec.utils import get_file_name
+# from genrec.utils import get_total_steps
+# from genrec.utils import log
 import numpy as np
 import torch
 from torch import optim
@@ -39,6 +39,73 @@ from torch.nn import utils
 import tqdm
 from transformers import optimization
 
+def config_for_log(config: dict[str, Any]) -> dict[str, Any]:
+  """Prepares the configuration dictionary for logging by removing unnecessary keys and converting list values to strings.
+
+  Args:
+      config (dict): The configuration dictionary.
+
+  Returns:
+      dict: The configuration dictionary prepared for logging.
+  """
+  config = config.copy()
+  config.pop('device', None)
+  config.pop('accelerator', None)
+  for k, v in config.items():
+    if isinstance(v, list):
+      config[k] = str(v)
+  return config
+
+def get_file_name(config: dict[str, Any], suffix: str = '') -> str:
+  """Generates a unique file name based on the given configuration and suffix.
+
+  Args:
+      config (dict): The configuration dictionary.
+      suffix (str): The suffix to append to the file name.
+
+  Returns:
+      str: The unique file name.
+  """
+  config_str = ''.join(
+      str(value) for key, value in config.items() if key != 'accelerator'
+  )
+  md5 = hashlib.md5(config_str.encode()).hexdigest()[:6]
+  command_line_args = get_command_line_args_str()
+  logfilename = f'{config["run_id"]}-{command_line_args}-{config["run_local_time"]}-{md5}-{suffix}'
+  return logfilename
+
+def get_total_steps(config, train_dataloader):
+  """Calculate the total number of steps for training based on the given configuration and dataloader.
+
+  Args:
+      config (dict): The configuration dictionary containing the training
+        parameters.
+      train_dataloader (DataLoader): The dataloader for the training dataset.
+
+  Returns:
+      int: The total number of steps for training.
+  """
+  if config['steps'] is not None:
+    return config['steps']
+  else:
+    return len(train_dataloader) * config['epochs']
+
+def log(message, accelerator, logger, level='info'):
+  """Logs a message to the logger.
+
+  Args:
+      message (str): The message to log.
+      accelerator (Accelerator): The accelerator object.
+      logger (logging.Logger): The logger object.
+      level (str): The log level ('info', 'error', 'warning', 'debug').
+  """
+  if accelerator.is_main_process:
+    try:
+      level = logging.getLevelNamesMapping()[level.upper()]
+    except KeyError as exc:
+      raise ValueError(f'Invalid log level: {level}') from exc
+
+    logger.log(level, message)
 
 get_scheduler = optimization.get_scheduler
 tqdm = tqdm.tqdm

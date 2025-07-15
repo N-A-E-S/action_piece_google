@@ -19,7 +19,8 @@ import logging
 
 from typing import Any
 import datasets as datasets_lib
-from genrec.utils import log as log_lib
+# 移除这行自导入
+# from genrec.dataset import AbstractDataset
 
 
 class AbstractDataset:
@@ -157,6 +158,14 @@ class AbstractDataset:
 
   def log(self, message: str, level: str = 'info') -> None:
     """Logs a message with the specified level."""
-    return log_lib(
-        message, self.config['accelerator'], self.logger, level=level
-    )
+    if self.config['accelerator'].is_main_process:
+      # 兼容 Python 3.10 的日志级别映射
+      level_mapping = {
+          'DEBUG': logging.DEBUG,
+          'INFO': logging.INFO,
+          'WARNING': logging.WARNING,
+          'ERROR': logging.ERROR,
+          'CRITICAL': logging.CRITICAL
+      }
+      level_num = level_mapping.get(level.upper(), logging.INFO)
+      self.logger.log(level_num, message)

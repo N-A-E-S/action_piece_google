@@ -260,7 +260,7 @@ class AmazonReviews2014(AbstractDataset):
 
   def _load_metadata(
       self, path: str, item2id: dict[str, int]
-  ) -> dict[str, Any]:
+  ) -> dict[str, Any]
     """Load metadata from a given path and filter it based on the provided data maps.
 
     Args:
@@ -274,7 +274,7 @@ class AmazonReviews2014(AbstractDataset):
     self.log('[DATASET] Loading metadata...')
     data = {}
     item_asins = set(item2id.keys())
-    for info in tqdm.tqdm(self._parse_gz(path)):
+    for info in tqdm.tqdm(parse_gz(path)):  # 修改这里：使用 parse_gz 而不是 self._parse_gz
       if info['asin'] not in item_asins:
         continue
       data[info['asin']] = info

@@ -21,8 +21,9 @@ from typing import Any
 
 import accelerate as accelerate_lib
 from genrec import utils
-from genrec.dataset import AbstractDataset
-from genrec.model import AbstractModel
+# 移除直接导入，改为延迟导入
+# from genrec.dataset import AbstractDataset
+# from genrec.model import AbstractModel
 from genrec.tokenizer import AbstractTokenizer
 import torch
 from torch.utils import data
@@ -59,8 +60,8 @@ class Pipeline:
 
   def __init__(
       self,
-      model_name: str | AbstractModel,
-      dataset_name: str | AbstractDataset,
+      model_name: str | Any,  # 改为 Any 以避免循环导入
+      dataset_name: str | Any,  # 改为 Any 以避免循环导入
       tokenizer: AbstractTokenizer | None = None,
       trainer=None,
       config_dict: dict[str, Any] | None = None,
@@ -72,6 +73,12 @@ class Pipeline:
         config_file=config_file,
         config_dict=config_dict,
     )
+    
+    # 调试：打印可能有问题的配置项
+    print(f"DEBUG: tensorboard_log_dir = {self.config.get('tensorboard_log_dir')} (type: {type(self.config.get('tensorboard_log_dir'))})")
+    print(f"DEBUG: dataset = {self.config.get('dataset')} (type: {type(self.config.get('dataset'))})")
+    print(f"DEBUG: model = {self.config.get('model')} (type: {type(self.config.get('model'))})")
+    
     # Automatically set devices and ddp
     self.config['device'], self.config['use_ddp'] = utils.init_device()
 
@@ -122,10 +129,28 @@ class Pipeline:
   @property
   def project_dir(self) -> str:
     """Returns the directory for the accelerator."""
+    # 辅助函数：将任何值转换为字符串
+    def to_string(value):
+      if isinstance(value, list):
+        if len(value) > 0:
+          # 如果是列表，取第一个元素并转为字符串
+          return str(value[0])
+        else:
+          return 'unknown'
+      elif value is None:
+        return 'unknown'
+      else:
+        return str(value)
+    
+    # 修复：确保所有路径组件都是字符串
+    tensorboard_log_dir = to_string(self.config.get('tensorboard_log_dir', 'tensorboard'))
+    dataset = to_string(self.config.get('dataset', 'unknown_dataset'))
+    model = to_string(self.config.get('model', 'unknown_model'))
+    
     return os.path.join(
-        self.config['tensorboard_log_dir'],
-        self.config['dataset'],
-        self.config['model'],
+        tensorboard_log_dir,
+        dataset,
+        model,
     )
 
   @property
