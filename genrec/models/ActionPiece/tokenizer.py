@@ -185,7 +185,6 @@ class ActionPieceTokenizer(AbstractTokenizer):
   #     item2sem_ids[item] = tuple(sem_ids[i].tolist())
   #   return item2sem_ids
 
-  # 请在 genrec/models/ActionPiece/tokenizer.py 中替换 _sent_emb_to_sem_id 方法
 
   def _sent_emb_to_sem_id(
       self, dataset: AbstractDataset, sent_embs: np.ndarray
