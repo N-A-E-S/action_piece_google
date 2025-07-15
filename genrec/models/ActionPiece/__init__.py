@@ -13,9 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Dataset classes for GenRec."""
+"""ActionPiece model package."""
 
-from genrec.datasets.AmazonReviews2014.dataset import AmazonReviews2014
+from genrec.models.ActionPiece.model import ActionPiece
+from genrec.models.ActionPiece.tokenizer import ActionPieceTokenizer
 
-# 为了让 utils.get_dataset 能够找到，我们需要将类暴露在模块级别
-__all__ = ['AmazonReviews2014']
+__all__ = ['ActionPiece', 'ActionPieceTokenizer']

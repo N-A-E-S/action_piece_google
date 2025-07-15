@@ -144,13 +144,13 @@ class Pipeline:
     
     # 修复：确保所有路径组件都是字符串
     tensorboard_log_dir = to_string(self.config.get('tensorboard_log_dir', 'tensorboard'))
-    dataset = to_string(self.config.get('dataset', 'unknown_dataset'))
-    model = to_string(self.config.get('model', 'unknown_model'))
+    dataset_name = to_string(self.config.get('dataset', 'unknown_dataset'))
+    model_name = to_string(self.config.get('model', 'unknown_model'))
     
     return os.path.join(
         tensorboard_log_dir,
-        dataset,
-        model,
+        dataset_name,
+        model_name,
     )
 
   @property

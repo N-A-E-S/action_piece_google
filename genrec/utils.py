@@ -193,10 +193,10 @@ def get_tokenizer(model_name: str):
   module_name = f'genrec.models.{model_name}.tokenizer'
   try:
     module = importlib.import_module(module_name)
-    getattr(module, f'{model_name}Tokenizer')
+    tokenizer_class = getattr(module, f'{model_name}Tokenizer')
+    return tokenizer_class
   except Exception as exc:
     raise ValueError(f'Tokenizer for model "{model_name}" not found.') from exc
-
 
 def get_model(model_name: Union[str, Any]) -> Any:
   """Retrieves the model class based on the provided model name.
@@ -242,13 +242,22 @@ def get_dataset(dataset_name: Union[str, Any]) -> Any:
   if isinstance(dataset_name, AbstractDataset):
     return dataset_name
 
+  # 首先尝试从 genrec.datasets 模块中获取
   try:
-    dataset_class = getattr(
-        importlib.import_module('genrec.datasets'), dataset_name
-    )
-  except Exception as exc:
-    raise ValueError(f'Dataset "{dataset_name}" not found.') from exc
-  return dataset_class
+    dataset_module = importlib.import_module('genrec.datasets')
+    dataset_class = getattr(dataset_module, dataset_name)
+    return dataset_class
+  except (ImportError, AttributeError):
+    # 如果上面失败，尝试从具体的子模块中获取
+    try:
+      if dataset_name == 'AmazonReviews2014':
+        from genrec.datasets.AmazonReviews2014.dataset import AmazonReviews2014
+        return AmazonReviews2014
+      else:
+        # 可以在这里添加其他数据集的映射
+        raise ValueError(f'Dataset "{dataset_name}" not found.')
+    except ImportError as exc:
+      raise ValueError(f'Dataset "{dataset_name}" not found.') from exc
 
 
 def get_trainer(model_name: Union[str, Any]):
@@ -266,11 +275,13 @@ def get_trainer(model_name: Union[str, Any]):
   from genrec.trainer import Trainer
   
   if isinstance(model_name, str):
-    trainer_class = getattr(
-        importlib.import_module(f'genrec.models.{model_name}.trainer'),
-        f'{model_name}Trainer',
-    )
-    return trainer_class
+    try:
+      trainer_module = importlib.import_module(f'genrec.models.{model_name}.trainer')
+      trainer_class = getattr(trainer_module, f'{model_name}Trainer')
+      return trainer_class
+    except (ImportError, AttributeError):
+      # 如果找不到专用的训练器，使用默认的训练器
+      return Trainer
 
   return Trainer
 
@@ -316,7 +327,25 @@ def _convert_value(value: str) -> Any:
   # 修复：只有当字符串明确包含 [ 和 ] 时才尝试解析为列表
   if value.strip().startswith('[') and value.strip().endswith(']'):
     try:
-      return list(map(lambda x: x.strip(), value.strip('[]').split(',')))
+      # 更安全的列表解析
+      inner = value.strip()[1:-1].strip()
+      if not inner:  # 空列表
+        return []
+      # 按逗号分割并清理
+      items = [item.strip().strip('"\'') for item in inner.split(',')]
+      # 尝试转换每个元素
+      converted_items = []
+      for item in items:
+        try:
+          # 尝试转换为数字
+          if '.' in item:
+            converted_items.append(float(item))
+          else:
+            converted_items.append(int(item))
+        except ValueError:
+          # 保持为字符串
+          converted_items.append(item)
+      return converted_items
     except (ValueError, TypeError):
       pass
   return value

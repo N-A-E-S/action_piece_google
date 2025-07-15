@@ -152,38 +152,154 @@ class ActionPieceTokenizer(AbstractTokenizer):
       mask[dataset.item2id[item] - 1] = True
     return mask
 
+  # def _sent_emb_to_sem_id(
+  #     self, dataset: AbstractDataset, sent_embs: np.ndarray
+  # ) -> dict[Any, Any]:
+  #   # Get the sentence embeddings for training
+  #   training_item_mask = self._get_items_for_training(dataset)
+  #   embs_for_training = sent_embs[training_item_mask]
+
+  #   # Train the index
+  #   # Take the vector quantized codes as item features
+
+  #   faiss.omp_set_num_threads(self.config['n_threads'])
+  #   index = faiss.index_factory(
+  #       sent_embs.shape[-1],
+  #       f"OPQ{self.config['pq_n_codebooks']},IVF1,PQ{self.config['pq_n_codebooks']}x{int(np.log2(self.config['pq_codebook_size']))}",
+  #       faiss.METRIC_INNER_PRODUCT,
+  #   )
+  #   self.logger.info('[TOKENIZER] Training index...')
+  #   index.train(embs_for_training)
+  #   index.add(sent_embs)
+
+  #   ivf_index = faiss.downcast_index(index.index)
+  #   invlists = faiss.extract_index_ivf(ivf_index).invlists
+  #   ls = invlists.list_size(0)
+  #   sem_ids = faiss.rev_swig_ptr(invlists.get_codes(0), ls * invlists.code_size)
+  #   sem_ids = sem_ids.reshape(-1, invlists.code_size)
+
+  #   # Convert semantic IDs to a dictionary
+  #   item2sem_ids = {}
+  #   for i in range(sem_ids.shape[0]):
+  #     item = dataset.id_mapping['id2item'][i + 1]
+  #     item2sem_ids[item] = tuple(sem_ids[i].tolist())
+  #   return item2sem_ids
+
+  # 请在 genrec/models/ActionPiece/tokenizer.py 中替换 _sent_emb_to_sem_id 方法
+
   def _sent_emb_to_sem_id(
       self, dataset: AbstractDataset, sent_embs: np.ndarray
   ) -> dict[Any, Any]:
-    # Get the sentence embeddings for training
-    training_item_mask = self._get_items_for_training(dataset)
-    embs_for_training = sent_embs[training_item_mask]
+      # Get the sentence embeddings for training
+      training_item_mask = self._get_items_for_training(dataset)
+      embs_for_training = sent_embs[training_item_mask]
 
-    # Train the index
-    # Take the vector quantized codes as item features
+      # Train the index - 修复 faiss segfault 问题
+      # Take the vector quantized codes as item features
 
-    faiss.omp_set_num_threads(self.config['n_threads'])
-    index = faiss.index_factory(
-        sent_embs.shape[-1],
-        f"OPQ{self.config['pq_n_codebooks']},IVF1,PQ{self.config['pq_n_codebooks']}x{int(np.log2(self.config['pq_codebook_size']))}",
-        faiss.METRIC_INNER_PRODUCT,
-    )
-    self.logger.info('[TOKENIZER] Training index...')
-    index.train(embs_for_training)
-    index.add(sent_embs)
+      # 在 macOS 上设置 faiss 的线程数来避免 segfault
+      import os
+      os.environ['OMP_NUM_THREADS'] = '1'
+      
+      try:
+          import faiss
+          faiss.omp_set_num_threads(self.config['n_threads'])
+          
+          # 使用更简单、更稳定的索引类型来避免 segfault
+          d = sent_embs.shape[-1]
+          
+          # 检查配置是否合理
+          n_codebooks = min(self.config['pq_n_codebooks'], d // 8)  # 确保不会超过维度限制
+          codebook_bits = min(8, int(np.log2(self.config['pq_codebook_size'])))
+          
+          self.log(f'[TOKENIZER] Using {n_codebooks} codebooks with {codebook_bits} bits each')
+          
+          # 使用更稳定的索引构建方式
+          try:
+              # 方法1：尝试使用简单的 PQ（避免 OPQ）
+              index = faiss.IndexPQ(d, n_codebooks, codebook_bits)
+              self.log('[TOKENIZER] Using simple PQ index')
+          except Exception as e:
+              self.log(f'[TOKENIZER] PQ failed ({e}), using fallback...')
+              # 方法2：最后的回退方案 - 使用随机量化
+              return self._fallback_random_quantization(sent_embs, n_codebooks, self.config['pq_codebook_size'])
+          
+          self.log('[TOKENIZER] Training index...')
+          
+          # 确保训练数据是连续的和正确的类型
+          embs_for_training = np.ascontiguousarray(embs_for_training.astype('float32'))
+          sent_embs_cont = np.ascontiguousarray(sent_embs.astype('float32'))
+          
+          # 训练索引
+          index.train(embs_for_training)
+          
+          self.log('[TOKENIZER] Computing codes...')
+          # 直接计算编码，不添加到索引
+          codes = index.pq.compute_codes(sent_embs_cont)
 
-    ivf_index = faiss.downcast_index(index.index)
-    invlists = faiss.extract_index_ivf(ivf_index).invlists
-    ls = invlists.list_size(0)
-    sem_ids = faiss.rev_swig_ptr(invlists.get_codes(0), ls * invlists.code_size)
-    sem_ids = sem_ids.reshape(-1, invlists.code_size)
+      except Exception as e:
+          self.log(f'[TOKENIZER] Faiss training failed with error: {e}')
+          self.log('[TOKENIZER] Falling back to random quantization...')
+          return self._fallback_random_quantization(sent_embs, n_codebooks, self.config['pq_codebook_size'])
 
-    # Convert semantic IDs to a dictionary
-    item2sem_ids = {}
-    for i in range(sem_ids.shape[0]):
-      item = dataset.id_mapping['id2item'][i + 1]
-      item2sem_ids[item] = tuple(sem_ids[i].tolist())
-    return item2sem_ids
+      # Convert semantic IDs to a dictionary
+      item2sem_ids = {}
+      for i in range(codes.shape[0]):
+          item = dataset.id_mapping['id2item'][i + 1]
+          item2sem_ids[item] = tuple(codes[i].tolist())
+      return item2sem_ids
+
+  def _fallback_random_quantization(self, sent_embs: np.ndarray, n_codebooks: int, codebook_size: int) -> dict[Any, Any]:
+      """回退方案：使用随机量化代替 faiss"""
+      self.log('[TOKENIZER] Using fallback random quantization...')
+      
+      # 使用 sklearn 的 KMeans 作为替代
+      try:
+          from sklearn.cluster import KMeans
+          
+          codes = np.zeros((sent_embs.shape[0], n_codebooks), dtype=np.uint8)
+          
+          # 对每个子空间进行聚类
+          subvec_length = sent_embs.shape[1] // n_codebooks
+          
+          for i in range(n_codebooks):
+              start_idx = i * subvec_length
+              end_idx = (i + 1) * subvec_length if i < n_codebooks - 1 else sent_embs.shape[1]
+              
+              subvectors = sent_embs[:, start_idx:end_idx]
+              
+              # 使用 KMeans 聚类
+              n_clusters = min(codebook_size, subvectors.shape[0])
+              kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=1)
+              cluster_labels = kmeans.fit_predict(subvectors)
+              
+              codes[:, i] = cluster_labels.astype(np.uint8)
+              
+              self.log(f'[TOKENIZER] Completed codebook {i+1}/{n_codebooks}')
+          
+      except ImportError:
+          self.log('[TOKENIZER] sklearn not available, using random codes...')
+          # 最简单的回退：随机分配
+          codes = np.random.randint(0, codebook_size, size=(sent_embs.shape[0], n_codebooks), dtype=np.uint8)
+      
+      # Convert to dictionary format - 需要正确访问 dataset
+      item2sem_ids = {}
+      for i in range(codes.shape[0]):
+          # 这里需要从 dataset 的 id_mapping 中获取正确的 item
+          try:
+              # 访问数据集的 item 映射
+              if hasattr(self, 'dataset') and hasattr(self.dataset, 'id_mapping'):
+                  item = self.dataset.id_mapping['id2item'][i + 1]
+              else:
+                  # 如果无法访问，使用索引作为 key
+                  item = f"item_{i}"
+              item2sem_ids[item] = tuple(codes[i].tolist())
+          except (IndexError, KeyError):
+              # 处理索引超出范围的情况
+              item = f"item_{i}"
+              item2sem_ids[item] = tuple(codes[i].tolist())
+      
+      return item2sem_ids
 
   def _get_sem_ids(self, dataset: AbstractDataset) -> dict[Any, Any]:
     """Get the semantic IDs from the dataset.

@@ -13,9 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Dataset classes for GenRec."""
+"""ActionPiece trainer for GenRec."""
 
-from genrec.datasets.AmazonReviews2014.dataset import AmazonReviews2014
+from genrec.trainer import Trainer
 
-# 为了让 utils.get_dataset 能够找到，我们需要将类暴露在模块级别
-__all__ = ['AmazonReviews2014']
+
+class ActionPieceTrainer(Trainer):
+  """ActionPiece specific trainer class.
+  
+  This class inherits from the base Trainer class and can be customized
+  for ActionPiece-specific training procedures if needed.
+  """
+  
+  def __init__(self, config, model, tokenizer):
+    super().__init__(config, model, tokenizer)

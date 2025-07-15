@@ -24,3 +24,5 @@ share/python-wheels/
 MANIFEST
 
 cache/cache/
+cache/
+logs/

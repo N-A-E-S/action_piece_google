@@ -69,6 +69,8 @@ def check_available_category(category: str):
   )
 
 
+# 请将这个函数直接替换 genrec/datasets/AmazonReviews2014/dataset.py 中的 parse_gz 函数
+
 def parse_gz(path: str):
   """Parse a gzipped file and yield each line as a dict.
 
@@ -78,10 +80,28 @@ def parse_gz(path: str):
   Yields:
       object: Each line of the gzipped file, parsed as a dict.
   """
-  with gzip.open(path, 'r') as g:
-    for l in g:
-      l = l.replace(b'true', b'True').replace(b'false', b'False')
-      yield json.loads(l)
+  import ast
+  
+  with gzip.open(path, 'rt', encoding='utf-8', errors='ignore') as g:
+    for line_num, line in enumerate(g, 1):
+      line = line.strip()
+      if not line:
+        continue
+        
+      try:
+        # 首先尝试使用 json.loads（适用于评论数据）
+        yield json.loads(line)
+      except json.JSONDecodeError:
+        try:
+          # 如果 JSON 解析失败，尝试使用 ast.literal_eval（适用于元数据）
+          # 这可以安全地解析 Python 字典格式的字符串
+          yield ast.literal_eval(line)
+        except (ValueError, SyntaxError) as e:
+          # 如果两种方法都失败，记录错误并跳过这一行
+          if line_num <= 10:  # 只显示前10个错误
+            print(f"Warning: Failed to parse line {line_num} in {path}: {e}")
+            print(f"Line content: {line[:100]}..." if len(line) > 100 else f"Line content: {line}")
+          continue
 
 
 def get_item_seqs(
@@ -260,7 +280,7 @@ class AmazonReviews2014(AbstractDataset):
 
   def _load_metadata(
       self, path: str, item2id: dict[str, int]
-  ) -> dict[str, Any]
+  ) -> dict[str, Any]:
     """Load metadata from a given path and filter it based on the provided data maps.
 
     Args:
@@ -274,7 +294,7 @@ class AmazonReviews2014(AbstractDataset):
     self.log('[DATASET] Loading metadata...')
     data = {}
     item_asins = set(item2id.keys())
-    for info in tqdm.tqdm(parse_gz(path)):  # 修改这里：使用 parse_gz 而不是 self._parse_gz
+    for info in tqdm.tqdm(parse_gz(path)):
       if info['asin'] not in item_asins:
         continue
       data[info['asin']] = info
@@ -319,7 +339,7 @@ class AmazonReviews2014(AbstractDataset):
     """
     self.log('[DATASET] Extracting meta sentences...')
     item2meta = {}
-    for item, meta in tqdm(metadata.items()):
+    for item, meta in tqdm.tqdm(metadata.items()):
       meta_sentence = ''
       keys = set(meta.keys())
       features_needed = [
