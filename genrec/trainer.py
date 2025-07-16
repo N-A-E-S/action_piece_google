@@ -38,6 +38,34 @@ from torch import optim
 from torch.nn import utils
 import tqdm
 from transformers import optimization
+import hashlib
+import sys
+
+def get_command_line_args_str():
+  """Get command line arguments as a string.
+
+  Returns:
+      str: Command line arguments as a string.
+  """
+  filtered_args = []
+  for arg in sys.argv:
+    filter_flag = False
+    for flag in [
+        '--model',
+        '--dataset',
+        '--category',
+        '--my_log_dir',
+        '--tensorboard_log_dir',
+        '--ckpt_dir',
+    ]:
+      if arg.startswith(flag):
+        filter_flag = True
+        break
+    if arg.startswith('--cache_dir'):
+      filtered_args.append(f'--cache_dir={os.path.basename(arg.split("=")[1])}')
+    elif not filter_flag:
+      filtered_args.append(arg)
+  return '_'.join(filtered_args).replace('/', '|')
 
 def config_for_log(config: dict[str, Any]) -> dict[str, Any]:
   """Prepares the configuration dictionary for logging by removing unnecessary keys and converting list values to strings.
@@ -101,11 +129,21 @@ def log(message, accelerator, logger, level='info'):
   """
   if accelerator.is_main_process:
     try:
-      level = logging.getLevelNamesMapping()[level.upper()]
+      # 兼容 Python 3.10 和更早版本的日志级别映射
+      level_mapping = {
+          'DEBUG': logging.DEBUG,
+          'INFO': logging.INFO,
+          'WARNING': logging.WARNING,
+          'ERROR': logging.ERROR,
+          'CRITICAL': logging.CRITICAL
+      }
+      level_num = level_mapping.get(level.upper())
+      if level_num is None:
+        raise ValueError(f'Invalid log level: {level}')
     except KeyError as exc:
       raise ValueError(f'Invalid log level: {level}') from exc
 
-    logger.log(level, message)
+    logger.log(level_num, message)
 
 get_scheduler = optimization.get_scheduler
 tqdm = tqdm.tqdm

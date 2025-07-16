@@ -176,13 +176,25 @@ class Pipeline:
     train_dataloader = get_dataloader(
         'train', self.config['train_batch_size'], True
     )
+
     if self.config['n_inference_ensemble'] == -1:
       eval_batch_size = self.config['eval_batch_size']
     else:
-      eval_batch_size = max(
-          self.config['eval_batch_size'] // self.config['n_inference_ensemble'],
-          1,
-      )
+      # 确保批次大小是 n_inference_ensemble 的倍数
+      n_ensemble = self.config['n_inference_ensemble']
+      base_batch_size = max(self.config['eval_batch_size'] // n_ensemble, 1)
+      # 重要：确保最终批次大小是ensemble数量的倍数
+      eval_batch_size = base_batch_size * n_ensemble
+      
+      # 如果调整后的批次大小太小，至少设置为ensemble大小
+      if eval_batch_size < n_ensemble:
+        eval_batch_size = n_ensemble
+        
+      # 记录调整的批次大小
+      if self.accelerator.is_main_process:
+        self.log(f'Adjusted eval batch size from {self.config["eval_batch_size"]} to {eval_batch_size} '
+                f'to be divisible by n_inference_ensemble={n_ensemble}')
+
     val_dataloader = get_dataloader('val', eval_batch_size, False)
     test_dataloader = get_dataloader('test', eval_batch_size, False)
 
