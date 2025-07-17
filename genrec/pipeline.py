@@ -166,37 +166,49 @@ class Pipeline:
     """
 
     def get_dataloader(split, batch_size, shuffle):
-      return DataLoader(
-          self.tokenized_datasets[split],
-          batch_size=batch_size,
-          shuffle=shuffle,
-          collate_fn=self.tokenizer.collate_fn[split],
-      )
+        return DataLoader(
+            self.tokenized_datasets[split],
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=self.tokenizer.collate_fn[split],
+            drop_last=True if split in ['val', 'test'] else False,  # 关键：对evaluation数据使用drop_last
+        )
+
     # DataLoader
     train_dataloader = get_dataloader(
         'train', self.config['train_batch_size'], True
     )
 
+    # 处理evaluation batch size以确保与n_inference_ensemble兼容
     if self.config['n_inference_ensemble'] == -1:
-      eval_batch_size = self.config['eval_batch_size']
+        eval_batch_size = self.config['eval_batch_size']
     else:
-      # 确保批次大小是 n_inference_ensemble 的倍数
-      n_ensemble = self.config['n_inference_ensemble']
-      base_batch_size = max(self.config['eval_batch_size'] // n_ensemble, 1)
-      # 重要：确保最终批次大小是ensemble数量的倍数
-      eval_batch_size = base_batch_size * n_ensemble
-      
-      # 如果调整后的批次大小太小，至少设置为ensemble大小
-      if eval_batch_size < n_ensemble:
-        eval_batch_size = n_ensemble
+        n_ensemble = self.config['n_inference_ensemble']
+        original_eval_batch_size = self.config['eval_batch_size']
         
-      # 记录调整的批次大小
-      if self.accelerator.is_main_process:
-        self.log(f'Adjusted eval batch size from {self.config["eval_batch_size"]} to {eval_batch_size} '
-                f'to be divisible by n_inference_ensemble={n_ensemble}')
+        # 确保批次大小是 n_inference_ensemble 的倍数
+        if original_eval_batch_size % n_ensemble != 0:
+            # 调整为最接近的倍数（向下取整）
+            eval_batch_size = (original_eval_batch_size // n_ensemble) * n_ensemble
+            
+            # 如果调整后的批次大小为0，设置为n_ensemble
+            if eval_batch_size == 0:
+                eval_batch_size = n_ensemble
+                
+            # 记录调整
+            if self.accelerator.is_main_process:
+                self.log(f'Adjusted eval batch size from {original_eval_batch_size} to {eval_batch_size} '
+                        f'to be divisible by n_inference_ensemble={n_ensemble}')
+        else:
+            eval_batch_size = original_eval_batch_size
 
     val_dataloader = get_dataloader('val', eval_batch_size, False)
     test_dataloader = get_dataloader('test', eval_batch_size, False)
+
+    # 验证batch size设置
+    if self.config['n_inference_ensemble'] != -1:
+        assert eval_batch_size % self.config['n_inference_ensemble'] == 0, \
+            f"eval_batch_size ({eval_batch_size}) must be divisible by n_inference_ensemble ({self.config['n_inference_ensemble']})"
 
     self.trainer.fit(train_dataloader, val_dataloader)
 
@@ -208,14 +220,14 @@ class Pipeline:
         self.model, test_dataloader
     )
     if self.accelerator.is_main_process:
-      self.log(
-          f'Loaded best model checkpoint from {self.trainer.saved_model_ckpt}'
-      )
+        self.log(
+            f'Loaded best model checkpoint from {self.trainer.saved_model_ckpt}'
+        )
     test_results = self.trainer.evaluate(test_dataloader)
 
     if self.accelerator.is_main_process:
-      for key in test_results:
-        self.trainer.accelerator.log({f'Test_Metric/{key}': test_results[key]})
+        for key in test_results:
+            self.trainer.accelerator.log({f'Test_Metric/{key}': test_results[key]})
     self.log(f'Test Results: {test_results}')
 
     self.trainer.end()

@@ -27,3 +27,4 @@ cache/cache/
 cache/
 logs/
 tensorboard/
+/scratch/zl4789/action_piece_google/ckpt
