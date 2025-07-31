@@ -31,7 +31,7 @@ actionpiece_vocab_size: 40000
 # Config for the model
 n_prob_encode_plus: 0
 num_beams: 50 # Number of beams for beam search
-n_inference_ensemble: 5 # Number of inference ensemble
+n_inference_ensemble: 4 # Number of inference ensemble
 train_shuffle: feature # none / feature / token
 
 # Config for the task

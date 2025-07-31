@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=64GB
 #SBATCH --account=pr_119_tandon_priority
-#SBATCH --time=24:00:00
+#SBATCH --time=5:00:00
 #SBATCH --gres=gpu:a100:1
 #SBATCH --mail-type=ALL          
 #SBATCH --mail-user=zl4789@nyu.edu
@@ -18,7 +18,7 @@ cd /scratch/zl4789/action_piece_google
 CUDA_VISIBLE_DEVICES=0 python main.py \
     --category=Sports_and_Outdoors \
     --weight_decay=0.15 \
-    --lr=0.005 \
+    --lr=0.01 \
     --n_hash_buckets=128
 
 conda deactivate
