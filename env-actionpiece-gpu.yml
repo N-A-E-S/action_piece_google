@@ -1,0 +1,30 @@
+name: actionpiece-gpu
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy=1.26
+  - pandas=1.5.3
+  - scikit-learn=1.5.0
+  - scipy=1.11  # 比 1.15 更稳，避免老代码不兼容
+  - tqdm
+  - pyyaml
+  - requests
+  - regex
+  - cmake        # 有些 faiss/torchgeo 构建或扩展会用到
+  - tmux         # 你原 YAML 里也有
+  - faiss-gpu=1.7.4  # 来自 conda-forge，稳定且 Py3.10 OK
+  - cudatoolkit=11.8 # 统一成 cu118 路线
+  - pip:
+      - accelerate==0.31.0
+      - datasets==2.20.0
+      - transformers==4.41.2
+      - einops==0.8.0
+      - tensorboard==2.17.0
+      - sentence-transformers==3.0.1
+      - torch==2.4.0+cu118
+      - torchvision==0.19.0+cu118
+      - triton==2.3.1
+      - --extra-index-url https://download.pytorch.org/whl/cu118

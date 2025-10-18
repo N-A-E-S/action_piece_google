@@ -6,7 +6,7 @@
 #SBATCH --time=28:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=ALL          
-#SBATCH --mail-user=zl4789@nyu.edu
+#SBATCH --mail-user=yh4663@nyu.edu
 #SBATCH --requeue
 
 source /share/apps/anaconda3/2024.02.07/etc/profile.d/conda.sh;
@@ -14,7 +14,7 @@ conda activate actionpiecelzd
 cd /scratch/yh4663/action_piece_google
 
 CUDA_VISIBLE_DEVICES=0 python main.py \
-    --category=Beauty \
+    --category=Musical_Instruments \
     --weight_decay=0.15 \
     --lr=0.001 \
     --n_hash_buckets=64
