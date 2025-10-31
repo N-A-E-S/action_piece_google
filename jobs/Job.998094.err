@@ -1,0 +1,25 @@
+Lmod has detected the following error: The following module(s) are unknown:
+"anaconda3/2024.02.07"
+
+Please check the spelling or version number. Also try "module spider ..."
+It is also possible your cache file is out-of-date; it may help to try:
+  $ module --ignore-cache load "anaconda3/2024.02.07"
+
+Also make sure that all modulefiles written in TCL start with the string
+#%Module
+
+
+
+
+EnvironmentNameNotFound: Could not find conda environment: actionpiecelzd
+You can list all discoverable environments with `conda info --envs`.
+
+
+Traceback (most recent call last):
+  File "/scratch/yh4663/action_piece_google/main.py", line 20, in <module>
+    from genrec.pipeline import Pipeline
+  File "/scratch/yh4663/action_piece_google/genrec/pipeline.py", line 23, in <module>
+    from genrec import utils
+  File "/scratch/yh4663/action_piece_google/genrec/utils.py", line 30, in <module>
+    import datasets.utils.logging
+ModuleNotFoundError: No module named 'datasets'

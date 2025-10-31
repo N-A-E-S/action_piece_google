@@ -1,0 +1,15 @@
+/opt/slurm/data/slurmd/job998065/slurm_script: line 12: /share/apps/anaconda3/2024.02.07/etc/profile.d/conda.sh: No such file or directory
+
+CondaError: Run 'conda init' before 'conda activate'
+
+Traceback (most recent call last):
+  File "/scratch/yh4663/action_piece_google/main.py", line 20, in <module>
+    from genrec.pipeline import Pipeline
+  File "/scratch/yh4663/action_piece_google/genrec/pipeline.py", line 23, in <module>
+    from genrec import utils
+  File "/scratch/yh4663/action_piece_google/genrec/utils.py", line 30, in <module>
+    import datasets.utils.logging
+ModuleNotFoundError: No module named 'datasets'
+
+CondaError: Run 'conda init' before 'conda deactivate'
+

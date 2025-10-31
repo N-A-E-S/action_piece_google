@@ -1,0 +1,3 @@
+DEBUG: tensorboard_log_dir = tensorboard/ (type: <class 'str'>)
+DEBUG: dataset = AmazonReviews2014 (type: <class 'str'>)
+DEBUG: model = ActionPiece (type: <class 'str'>)

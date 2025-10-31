@@ -6,7 +6,7 @@
 #SBATCH --time=28:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=ALL          
-#SBATCH --mail-user=zl4789@nyu.edu
+#SBATCH --mail-user=yh4663@nyu.edu
 #SBATCH --requeue
 
 source /share/apps/anaconda3/2024.02.07/etc/profile.d/conda.sh;
