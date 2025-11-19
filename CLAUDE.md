@@ -30,10 +30,42 @@ conda activate TIGER
 
 ### Running Training
 
-**Basic training (standard ActionPiece):**
+ActionPiece supports two workflows:
+
+#### Workflow 1: All-in-One (Original)
+Build vocabulary and train in a single step:
 ```bash
 CUDA_VISIBLE_DEVICES=0 python main.py --category=Sports_and_Outdoors
 ```
+
+#### Workflow 2: Two-Step (Recommended for Experimentation)
+**Step 1: Build vocabulary once**
+```bash
+# Build vocabulary for a category (only needs to be done once)
+python build_vocab.py --category=CDs_and_Vinyl --rand_seed=42
+```
+
+**Step 2: Train multiple times with different hyperparameters**
+```bash
+# First training run
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --rand_seed=42 \
+    --lr=0.001 \
+    --d_model=256
+
+# Second training run (vocabulary already built, just train)
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --rand_seed=43 \
+    --lr=0.005 \
+    --d_model=512
+```
+
+**Advantages of two-step workflow:**
+- Vocabulary construction can be time-consuming (especially for large datasets)
+- Build vocabulary once, experiment with different training hyperparameters multiple times
+- Clearer separation of data preprocessing and model training
 
 **Training with GRAM features:**
 ```bash
@@ -47,12 +79,34 @@ python main_actionpiece_gram.py \
     --train --eval
 ```
 
+**Two-step workflow with multimodal features:**
+```bash
+# Step 1: Build vocabulary with multimodal features
+python build_vocab.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --rand_seed=42
+
+# Step 2: Train with different hyperparameters
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --rand_seed=42 \
+    --lr=0.001 \
+    --d_model=256
+```
+
 **Common hyperparameters** (see `genrec/default.yaml`, `genrec/models/ActionPiece/config.yaml`, `genrec/datasets/AmazonReviews2014/config.yaml`):
 - `--category`: Dataset category (Beauty, Sports_and_Outdoors, CDs_and_Vinyl)
 - `--lr`: Learning rate (0.001-0.005)
 - `--weight_decay`: Weight decay (0.07-0.15)
 - `--n_hash_buckets`: Number of hash buckets (64-256)
 - `--rand_seed`: Random seed for reproducibility (default: 2024)
+- `--multimodal.enable`: Enable/disable multimodal features (true/false)
+- `--multimodal.image_pca_dim`: Image embedding PCA dimension (default: 128)
+- `--multimodal.final_pca_dim`: Final fused embedding dimension (default: 128)
 
 ### Testing
 
@@ -121,6 +175,11 @@ The `genrec.utils.get_config()` function merges these layers.
 
 ## Important File Paths
 
+### Entry Points
+- **`main.py`**: All-in-one training (builds vocabulary + trains model)
+- **`build_vocab.py`**: Build ActionPiece vocabulary only (no training)
+- **`train.py`**: Train model using pre-built vocabulary
+
 ### Core Implementation
 - **Vocabulary construction**: `genrec/models/ActionPiece/core.py:ActionPieceCore.train()`
 - **Tokenization with SPR**:
@@ -134,6 +193,101 @@ The `genrec.utils.get_config()` function merges these layers.
 - **Processed datasets**: `cache/AmazonReviews2014/{category}/processed/`
 - **Model checkpoints**: `ckpt/` (configured via `--ckpt_dir`)
 - **Logs**: `logs/` (configured via `--log_dir`)
+
+## Multimodal Configuration
+
+ActionPiece supports integrating image embeddings with text embeddings for richer item representations. This feature can be configured through the configuration system.
+
+### Configuration Options
+
+All multimodal settings are in `genrec/models/ActionPiece/config.yaml` under the `multimodal` section:
+
+```yaml
+multimodal:
+  enable: true  # Enable/disable multimodal fusion
+  image_path_template: "/path/to/{category}/{category}.emb-ViT-L-14.npy"
+  image_pca_dim: 128  # PCA dimension for image embeddings
+  final_pca_dim: 128  # Final dimension after text+image fusion (0 to disable)
+  fill_strategy: "zero"  # How to handle missing images: "zero" or "mean"
+  # Complete category mapping for Amazon 2018 dataset (full name -> short name)
+  category_mapping:
+    All_Beauty: "Beauty"
+    CDs_and_Vinyl: "CDs"
+    Sports_and_Outdoors: "Sports"
+    # ... (29 categories total, see config.yaml for full list)
+```
+
+The `category_mapping` automatically converts full category names (e.g., `CDs_and_Vinyl`) to short names (e.g., `CDs`) for constructing image file paths. This supports all 29 Amazon 2018 categories.
+
+### How Category Mapping Works
+
+When you run:
+```bash
+python main.py --category=CDs_and_Vinyl
+```
+
+The system automatically:
+1. Detects full category name: `CDs_and_Vinyl`
+2. Maps it to short name via `category_mapping`: `CDs`
+3. Constructs image path: `/path/to/CDs/CDs.emb-ViT-L-14.npy`
+
+If a category is not in the mapping, it defaults to the first part before underscore (e.g., `New_Category` → `New`).
+
+### Command-line Override
+
+You can override multimodal settings via command-line using dot notation:
+
+```bash
+# Enable multimodal with custom dimensions
+CUDA_VISIBLE_DEVICES=0 python main.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --multimodal.final_pca_dim=256 \
+    --lr=0.001 \
+    --d_model=256
+
+# Disable multimodal (text-only mode)
+CUDA_VISIBLE_DEVICES=0 python main.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=false \
+    --lr=0.001 \
+    --d_model=256
+
+# Change fill strategy for missing images
+CUDA_VISIBLE_DEVICES=0 python main.py \
+    --category=Sports_and_Outdoors \
+    --multimodal.fill_strategy=mean \
+    --rand_seed=42
+```
+
+The dot notation (`--multimodal.enable`) allows you to override specific nested configuration values without modifying the config file.
+
+### Image Embedding Format
+
+Image embeddings should be saved as `.npy` files in dictionary format:
+
+```python
+{
+    'asins': ['B001...', 'B002...', ...],  # List of ASINs
+    'embeddings': np.array([...])  # Shape: (N_items, embedding_dim)
+}
+```
+
+The tokenizer automatically aligns image embeddings with text embeddings using ASIN matching.
+
+### Missing Images Handling
+
+- **`fill_strategy: "zero"`**: Use zero vectors for items without images
+- **`fill_strategy: "mean"`**: Use mean of available image embeddings
+
+### Cached Files
+
+Multimodal processing creates cached files in `cache/AmazonReviews2014/{category}/processed/`:
+- `image_pca_{dim}_{strategy}.npy`: PCA-reduced image embeddings
+- `multimodal_final_pca_{dim}_{strategy}.npy`: Final fused embeddings
+
+Clear these caches if you change image embeddings or fusion parameters.
 
 ## Working with GRAM Features
 
@@ -189,6 +343,81 @@ Deterministic behavior is enforced when `reproducibility: true` in config (defau
 - **main**: Stable release with standard ActionPiece
 - **gram**: Experimental branch with GRAM feature integration
 
+## Complete Workflow Examples
+
+### Example 1: Quick Start (All-in-One)
+```bash
+# Single command: build vocab + train
+CUDA_VISIBLE_DEVICES=0 python main.py \
+    --category=CDs_and_Vinyl \
+    --rand_seed=42 \
+    --lr=0.001
+```
+
+### Example 2: Hyperparameter Tuning (Two-Step)
+```bash
+# Step 1: Build vocabulary once (takes time)
+python build_vocab.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --multimodal.final_pca_dim=256 \
+    --rand_seed=42
+
+# Step 2a: First training run
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --multimodal.final_pca_dim=256 \
+    --rand_seed=42 \
+    --lr=0.001 \
+    --d_model=256 \
+    --d_ff=2048
+
+# Step 2b: Second training run (different lr, no vocab rebuild)
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --multimodal.final_pca_dim=256 \
+    --rand_seed=42 \
+    --lr=0.005 \
+    --d_model=256 \
+    --d_ff=2048
+
+# Step 2c: Third training run (different model size)
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=CDs_and_Vinyl \
+    --multimodal.enable=true \
+    --multimodal.image_pca_dim=256 \
+    --multimodal.final_pca_dim=256 \
+    --rand_seed=42 \
+    --lr=0.001 \
+    --d_model=512 \
+    --d_ff=4096
+```
+
+### Example 3: Compare Text-Only vs Multimodal
+```bash
+# Build vocabulary with multimodal
+python build_vocab.py \
+    --category=Sports_and_Outdoors \
+    --multimodal.enable=true
+
+# Train with multimodal
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=Sports_and_Outdoors \
+    --multimodal.enable=true \
+    --rand_seed=42
+
+# Train without multimodal (text-only, uses same vocab structure)
+CUDA_VISIBLE_DEVICES=0 python train.py \
+    --category=Sports_and_Outdoors \
+    --multimodal.enable=false \
+    --rand_seed=42
+```
+
 ## Notes for Development
 
 - **Tokenizer caching**: Vocabularies are cached by a hash of construction parameters. Changing feature extraction or merging logic requires clearing the cache manually.
@@ -196,3 +425,4 @@ Deterministic behavior is enforced when `reproducibility: true` in config (defau
 - **Memory requirements**: Training requires ~16GB GPU memory for default hyperparameters. Reduce `batch_size` or `d_model` if OOM occurs.
 - **Distributed training**: Use `CUDA_VISIBLE_DEVICES=0,1,2,3` with `--distributed` flag. Not required for single GPU.
 - **Early stopping**: Controlled by `patience` parameter (default: 20 epochs without improvement on `val_metric`).
+- **Vocabulary reuse**: Once built, the vocabulary file (`cache/.../processed/actionpiece.json`) can be reused for multiple training runs with the same category and feature configuration.

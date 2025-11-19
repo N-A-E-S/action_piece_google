@@ -13,10 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Dataset classes for GenRec."""
-
-from genrec.datasets.AmazonReviews2014.dataset import AmazonReviews2014
-from genrec.datasets.AmazonReviews2018.dataset import AmazonReviews2018
-
-# 为了让 utils.get_dataset 能够找到，我们需要将类暴露在模块级别
-__all__ = ['AmazonReviews2018', 'AmazonReviews2018']
+category: Sports_and_Outdoors
+metadata: sentence # none / raw / sentence
+split: leave_one_out # leave_one_out
