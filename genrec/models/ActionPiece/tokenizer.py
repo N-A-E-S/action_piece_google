@@ -148,7 +148,7 @@ class ActionPieceTokenizer(AbstractTokenizer):
     USE_MULTIMODAL = multimodal_config.get('enable', False)
     IMAGE_PATH_TEMPLATE = multimodal_config.get('image_path_template', '')
     IMAGE_PCA_DIM = multimodal_config.get('image_pca_dim', 128)
-    FINAL_PCA_DIM = multimodal_config.get('final_pca_dim', 128)
+    FINAL_PCA_DIM = multimodal_config.get('final_pca_dim', 256)
     FILL_STRATEGY = multimodal_config.get('fill_strategy', 'zero')
 
     if not USE_MULTIMODAL:
@@ -313,6 +313,9 @@ class ActionPieceTokenizer(AbstractTokenizer):
     self.logger.info(
         f'[TOKENIZER] Image embeddings after PCA: {image_embs_reduced.shape}'
     )
+
+    # # ablation study only!
+    # return image_embs_reduced
 
     # 7. 拼接文本和降维后的图像
     self.logger.info('[TOKENIZER] Fusing text and image embeddings...')
