@@ -4,9 +4,9 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=64GB
-#SBATCH --account=pr_119_tandon_priority
-#SBATCH --time=24:00:00
-#SBATCH --gres=gpu:a100:1
+#SBATCH --time=40:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --partition=rtx8000
 #SBATCH --mail-type=ALL          
 #SBATCH --mail-user=zl4789@nyu.edu
 #SBATCH --requeue
@@ -16,10 +16,11 @@ conda activate TIGER
 cd /scratch/zl4789/action_piece_google
 
 CUDA_VISIBLE_DEVICES=0 python main.py \
-    --category=Beauty \
+    --category=All_Beauty \
     --weight_decay=0.15 \
     --lr=0.001 \
     --n_hash_buckets=64 \
-    --use_wandb 
+    --use_wandb \
+    --dataset=AmazonReviews2014
 
 conda deactivate

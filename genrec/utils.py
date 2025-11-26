@@ -35,7 +35,11 @@ from genrec.model import AbstractModel
 import numpy as np
 import requests
 import torch
+import urllib3
 import yaml
+
+# Disable SSL warnings for academic dataset downloads
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def init_seed(seed, reproducibility):
@@ -253,6 +257,10 @@ def get_dataset(dataset_name: Union[str, Any]) -> Any:
       if dataset_name == 'AmazonReviews2014':
         from genrec.datasets.AmazonReviews2014.dataset import AmazonReviews2014
         return AmazonReviews2014
+      if dataset_name == 'AmazonReviews2018':
+        from genrec.datasets.AmazonReviews2018.dataset import AmazonReviews2018
+        return AmazonReviews2018
+
       else:
         # 可以在这里添加其他数据集的映射
         raise ValueError(f'Dataset "{dataset_name}" not found.')
@@ -351,8 +359,30 @@ def _convert_value(value: str) -> Any:
   return value
 
 
+def deep_update(base_dict: dict[Any, Any], update_dict: dict[Any, Any]) -> dict[Any, Any]:
+  """Recursively update a nested dictionary.
+
+  Args:
+      base_dict (dict): The base dictionary to update.
+      update_dict (dict): The dictionary containing updates.
+
+  Returns:
+      dict: The updated dictionary.
+  """
+  for key, value in update_dict.items():
+    if key in base_dict and isinstance(base_dict[key], dict) and isinstance(value, dict):
+      # Recursively merge nested dictionaries
+      deep_update(base_dict[key], value)
+    else:
+      # Overwrite or add the value
+      base_dict[key] = value
+  return base_dict
+
+
 def convert_config_dict(config: dict[Any, Any]) -> dict[Any, Any]:
   """Convert the values in a dictionary to their appropriate types.
+
+  Recursively processes nested dictionaries.
 
   Args:
       config (dict): The dictionary containing the configuration values.
@@ -362,12 +392,14 @@ def convert_config_dict(config: dict[Any, Any]) -> dict[Any, Any]:
   """
   logger = logging.getLogger()
   for key, v in config.items():
-    if not isinstance(v, str):
-      continue
-    try:
-      config[key] = _convert_value(v)
-    except (ValueError, TypeError):
-      logger.warning('Could not convert value "%s" for key "%s".', v, key)
+    if isinstance(v, dict):
+      # Recursively convert nested dictionaries
+      config[key] = convert_config_dict(v)
+    elif isinstance(v, str):
+      try:
+        config[key] = _convert_value(v)
+      except (ValueError, TypeError):
+        logger.warning('Could not convert value "%s" for key "%s".', v, key)
   return config
 
 
@@ -452,10 +484,10 @@ def get_config(
   for file in config_file_list:
     cur_config = yaml.safe_load(open(file, 'r'))
     if cur_config is not None:
-      final_config.update(cur_config)
+      deep_update(final_config, cur_config)
 
   if config_dict:
-    final_config.update(config_dict)
+    deep_update(final_config, config_dict)
 
   final_config['run_local_time'] = get_local_time()
 
@@ -466,17 +498,21 @@ def get_config(
 def parse_command_line_args(unparsed: list[str]) -> dict[str, Any]:
   """Parses command line arguments and returns a dictionary of key-value pairs.
 
+  Supports nested configuration via dot notation (e.g., --multimodal.enable=true).
+
   Args:
       unparsed (list[str]): A list of command line arguments in the format
-        '--key=value'.
+        '--key=value' or '--parent.child=value'.
 
   Returns:
-      dict: A dictionary containing the parsed key-value pairs.
+      dict: A dictionary containing the parsed key-value pairs with nested
+        structure for dot-separated keys.
 
   Example:
       >>> parse_command_line_args(['--name=John', '--age=25',
-      '--is_student=True'])
-      {'name': 'John', 'age': 25, 'is_student': True}
+      '--is_student=True', '--multimodal.enable=false'])
+      {'name': 'John', 'age': 25, 'is_student': True,
+       'multimodal': {'enable': False}}
   """
   args = {}
   for text_arg in unparsed:
@@ -485,13 +521,29 @@ def parse_command_line_args(unparsed: list[str]) -> dict[str, Any]:
           f"Invalid command line argument: {text_arg}, please add '=' to"
           ' separate key and value.'
       )
-    key, value = text_arg.split('=')
+    key, value = text_arg.split('=', 1)
     key = key[len('--') :]
     try:
       value = _convert_value(value)
     except (ValueError, TypeError):
       pass
-    args[key] = value
+
+    # Handle nested configuration (e.g., multimodal.enable -> {'multimodal': {'enable': ...}})
+    if '.' in key:
+      keys = key.split('.')
+      current = args
+      for i, k in enumerate(keys[:-1]):
+        if k not in current:
+          current[k] = {}
+        elif not isinstance(current[k], dict):
+          # Key conflict: existing non-dict value
+          raise ValueError(
+              f"Cannot set nested key '{key}': '{k}' already has a non-dict value"
+          )
+        current = current[k]
+      current[keys[-1]] = value
+    else:
+      args[key] = value
   return args
 
 
@@ -503,7 +555,7 @@ def download_file(url: str, path: str) -> None:
       path (str): The path where the downloaded file will be saved.
   """
   logger = logging.getLogger()
-  response = requests.get(url)
+  response = requests.get(url, verify=False)
   if response.status_code == 200:
     with open(path, 'wb') as f:
       f.write(response.content)
