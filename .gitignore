@@ -25,6 +25,7 @@ MANIFEST
 
 cache/cache/
 cache/
+cache0/
 logs/
 tensorboard/
 ckpt/
